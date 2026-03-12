@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+eclipse/
+run/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Forge MDK generated
+src/generated/
+mcmodsrepo/
+
+# Local JDK path (machine-specific, keep out of VCS)
+# gradle.properties still committed but strip the java.home line via local.properties if needed

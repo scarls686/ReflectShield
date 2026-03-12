@@ -1,0 +1,10 @@
+{
+  "reflect_clash": {
+    "subtitle": "subtitles.reflectshield.reflect_clash",
+    "sounds": [
+      { "name": "reflectshield:clash0", "weight": 1 },
+      { "name": "reflectshield:clash1", "weight": 1 },
+      { "name": "reflectshield:clash2", "weight": 1 }
+    ]
+  }
+}

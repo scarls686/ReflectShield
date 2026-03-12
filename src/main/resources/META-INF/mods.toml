@@ -1,0 +1,37 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+issueTrackerURL="https://github.com/SCARLS686/ReflectShield/issues"
+
+[[mods]]
+    modId="reflectshield"
+    version="${file.jarVersion}"
+    displayName="ReflectShield"
+    #logoFile="reflectshield.png"
+    credits="Developed by SCARLS686 with Claude (Anthropic)"
+    authors="SCARLS686, Claude (Anthropic)"
+    description='''
+ReflectShield — 反弹盾
+
+按下反弹键激活一个短暂的碰撞盒，拦截并反弹飞来的投掷物（箭、三叉戟、火球等）。
+支持物品白名单、碰撞盒尺寸/位置自定义、调试渲染、大火球处理模式等多项配置。
+
+Activate a temporary shield hitbox to intercept and reflect incoming projectiles
+(arrows, tridents, fireballs, etc.). Highly configurable via in-game GUI.
+
+Minecraft 1.20.1 | Forge 47.2.0
+'''
+
+[[dependencies.reflectshield]]
+    modId="forge"
+    mandatory=true
+    versionRange="[47.2,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.reflectshield]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.20.1,1.21)"
+    ordering="NONE"
+    side="BOTH"
