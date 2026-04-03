@@ -38,5 +38,9 @@
   "config.reflectshield.reflectMode": "反弹方向模式",
   "config.reflectshield.reflectMode.tooltip": "0=准星方向，1=物理反射",
   "config.reflectshield.itemWhitelist": "物品白名单",
-  "config.reflectshield.itemWhitelist.tooltip": "空列表=不限制，支持通配符和NBT"
+  "config.reflectshield.itemWhitelist.tooltip": "空列表=不限制，支持通配符和NBT",
+
+  "item.reflectshield.reflect_skill_book": "弹射反弹技能书",
+  "skill.reflectshield.reflect_projectile": "弹射反弹",
+  "skill.reflectshield.reflect_projectile.tooltip": "被动技能。在战斗模式下手持剑类武器发动攻击时，自动于判定帧激活反弹盾，偏转飞来的投射物。"
 }

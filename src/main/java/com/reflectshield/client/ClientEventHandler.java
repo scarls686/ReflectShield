@@ -29,6 +29,23 @@ public class ClientEventHandler {
     /** 碰撞盒激活的开始时间（ms） */
     private static long shieldStartTime = 0L;
 
+    /** 由 PacketEfManaged 同步：当前玩家是否处于 EF 被动技能管理状态，按键路径不应激活 */
+    private static boolean efManaged = false;
+
+    /** 由 PacketEfManaged 在客户端线程调用 */
+    public static void setEfManaged(boolean managed) {
+        efManaged = managed;
+    }
+
+    /**
+     * 由 PacketShieldActivate 在客户端线程调用。
+     * EF 攻击事件在服务端激活了盾，通知客户端同步显示 debug 碰撞箱。
+     */
+    public static void onShieldActivatedByServer() {
+        isReflecting = true;
+        shieldStartTime = System.currentTimeMillis();
+    }
+
     /**
      * 每客户端 tick 检测按键状态变化并同步到服务端。
      * 使用 ClientTickEvent 而非 InputEvent.Key，以确保每帧只发一次包。
@@ -49,8 +66,9 @@ public class ClientEventHandler {
         }
 
         // 检测单次点击（consumeClick 每次点击只返回 true 一次）
+        // EF 被动技能管理的玩家：按键路径禁用，由服务端攻击事件触发
         // 同时在客户端检查白名单：只有手持符合白名单的物品才激活（与服务端逻辑保持一致）
-        if (KeyBindings.REFLECT_KEY.consumeClick() && !isReflecting
+        if (KeyBindings.REFLECT_KEY.consumeClick() && !isReflecting && !efManaged
                 && ItemMatcher.matches(mc.player.getMainHandItem())) {
             isReflecting = true;
             shieldStartTime = System.currentTimeMillis();

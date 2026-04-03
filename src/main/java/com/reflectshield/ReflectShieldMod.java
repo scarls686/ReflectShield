@@ -11,6 +11,7 @@ import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.DistExecutor;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig.Type;
@@ -41,6 +42,12 @@ public class ReflectShieldMod {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientProxy.register(modBus));
 
         MinecraftForge.EVENT_BUS.addListener(this::onServerStarted);
+
+        // Epic Fight 软依赖：仅在安装了 EF 时注册技能和技能书
+        if (ModList.get().isLoaded("epicfight")) {
+            com.reflectshield.compat.epicfight.EpicFightCompat.init(modBus);
+            LOGGER.info("ReflectShield: Epic Fight detected, registering reflect skill.");
+        }
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {

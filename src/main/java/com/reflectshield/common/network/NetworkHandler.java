@@ -32,5 +32,21 @@ public class NetworkHandler {
                 PacketReflectKey::decode,
                 PacketReflectKey::handle
         );
+
+        INSTANCE.registerMessage(
+                nextId(),
+                PacketShieldActivate.class,
+                PacketShieldActivate::encode,
+                PacketShieldActivate::decode,
+                PacketShieldActivate::handle
+        );
+
+        INSTANCE.registerMessage(
+                nextId(),
+                PacketEfManaged.class,
+                PacketEfManaged::encode,
+                PacketEfManaged::decode,
+                PacketEfManaged::handle
+        );
     }
 }

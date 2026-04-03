@@ -38,5 +38,9 @@
   "config.reflectshield.reflectMode": "Reflect Direction Mode",
   "config.reflectshield.reflectMode.tooltip": "0 = crosshair direction, 1 = physical reflection",
   "config.reflectshield.itemWhitelist": "Item Whitelist",
-  "config.reflectshield.itemWhitelist.tooltip": "Empty = allow all. Supports wildcards and NBT."
+  "config.reflectshield.itemWhitelist.tooltip": "Empty = allow all. Supports wildcards and NBT.",
+
+  "item.reflectshield.reflect_skill_book": "Projectile Reflect Skill Book",
+  "skill.reflectshield.reflect_projectile": "Projectile Reflect",
+  "skill.reflectshield.reflect_projectile.tooltip": "Passive. While in battle mode, automatically activates the reflect shield on the attack hit frame when wielding a sword-type weapon, deflecting incoming projectiles."
 }

@@ -24,8 +24,10 @@ import net.minecraftforge.fml.common.Mod;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Collections;
 
 @Mod.EventBusSubscriber(modid = ReflectShieldMod.MOD_ID)
 public class ReflectHandler {
@@ -36,6 +38,32 @@ public class ReflectHandler {
     /** 冷却记录：UUID → 冷却结束时间（ms） */
     private static final Map<UUID, Long> playerCooldowns = new ConcurrentHashMap<>();
 
+    /**
+     * 已装备 EF 反弹被动技能的玩家 UUID 集合。
+     * 由 ReflectSkill.onInitiate/onRemoved 维护。
+     * 这些玩家的反弹由 attacking() 上升沿触发，按键路径不应介入。
+     */
+    private static final Set<UUID> efManagedPlayers =
+            Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    /**
+     * EF 玩家 UUID → ServerPlayerPatch，持续轮询 attacking() 状态。
+     * 在 registerEfPlayer 时加入，unregisterEfPlayer 时移除。
+     */
+    private static final Map<UUID, yesman.epicfight.world.capabilities.entitypatch.player.ServerPlayerPatch> efPlayerPatches =
+            new ConcurrentHashMap<>();
+
+    /**
+     * 上一 tick 各玩家的 attacking 状态，用于检测 false→true 的上升沿。
+     */
+    private static final Map<UUID, Boolean> efPrevAttacking = new ConcurrentHashMap<>();
+
+    /**
+     * armed 标志：ACTION_EVENT_SERVER 验证武器合法后设为 true，
+     * 非攻击动画开始时设为 false。只有 armed=true 时，attacking() 上升沿才触发反弹。
+     */
+    private static final Map<UUID, Boolean> efArmed = new ConcurrentHashMap<>();
+
     /** 防重复反弹的 NBT 键 */
     private static final String REFLECTED_TAG = "rs_reflected";
 
@@ -43,11 +71,83 @@ public class ReflectHandler {
     // 网络包回调
     // -----------------------------------------------------------------------
 
+    /** 由 ReflectSkill.onInitiate 调用，注册玩家并开始持续轮询其 attacking() 状态。
+     *  仅在 connection 已就绪时才发包；加载存档时 connection 为 null，
+     *  届时由 onPlayerLoggedIn 在玩家完全连接后补发。 */
+    public static void registerEfPlayer(ServerPlayer player,
+            yesman.epicfight.world.capabilities.entitypatch.player.ServerPlayerPatch patch) {
+        UUID id = player.getUUID();
+        efManagedPlayers.add(id);
+        efPlayerPatches.put(id, patch);
+        efPrevAttacking.put(id, false);
+        efArmed.put(id, false);
+        if (player.connection != null) {
+            sendEfManagedPacket(player, true);
+        }
+    }
+
+    /** 由 ReflectSkill.onRemoved 调用，取消注册并通知客户端恢复按键路径 */
+    public static void unregisterEfPlayer(ServerPlayer player) {
+        UUID id = player.getUUID();
+        efManagedPlayers.remove(id);
+        efPlayerPatches.remove(id);
+        efPrevAttacking.remove(id);
+        efArmed.remove(id);
+        if (player.connection != null) {
+            sendEfManagedPacket(player, false);
+        }
+    }
+
+    /** 玩家完全登录后，补发 EF 管理状态包 */
+    @SubscribeEvent
+    public static void onPlayerLoggedIn(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (efManagedPlayers.contains(player.getUUID())) {
+            sendEfManagedPacket(player, true);
+        }
+    }
+
+    private static void sendEfManagedPacket(ServerPlayer player, boolean managed) {
+        com.reflectshield.common.network.NetworkHandler.INSTANCE.sendTo(
+                new com.reflectshield.common.network.PacketEfManaged(managed),
+                player.connection.connection,
+                net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT
+        );
+    }
+
     /**
-     * 由 PacketReflectKey.handle() 在服务端主线程调用。
+     * 由 ReflectSkill 的 ACTION_EVENT_SERVER 调用。
+     * 武器类型验证后设置 armed 标志，只有 armed=true 时 attacking() 上升沿才触发反弹。
+     */
+    public static void setEfArmed(UUID id, boolean armed) {
+        efArmed.put(id, armed);
+    }
+
+    /**
+     * 由 ReflectSkill（EF 攻击事件）调用，直接激活，不经过 EF 管理检查。
+     * 武器类型和白名单已在 ReflectSkill 的监听器中验证完毕。
+     */
+    public static void activateFromEf(ServerPlayer player) {
+        UUID id = player.getUUID();
+        if (!isOnCooldown(id)) {
+            playerShieldActivations.put(id, System.currentTimeMillis());
+            // 通知客户端同步显示 debug 碰撞箱
+            com.reflectshield.common.network.NetworkHandler.INSTANCE.sendTo(
+                    new com.reflectshield.common.network.PacketShieldActivate(),
+                    player.connection.connection,
+                    net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT
+            );
+        }
+    }
+
+    /**
+     * 由 PacketReflectKey.handle() 在服务端主线程调用（按键路径）。
+     * 若玩家已由 EF 被动技能管理，忽略按键——EF 攻击事件负责触发。
      */
     public static void setPlayerPressing(ServerPlayer player, boolean pressing) {
         UUID id = player.getUUID();
+        // EF 路径优先：已装备被动技能的玩家，按键不触发
+        if (pressing && efManagedPlayers.contains(id)) return;
         if (pressing) {
             if (!isOnCooldown(id)) {
                 playerShieldActivations.put(id, System.currentTimeMillis());
@@ -75,6 +175,28 @@ public class ReflectHandler {
         long now = System.currentTimeMillis();
         Iterator<Map.Entry<UUID, Long>> iter = playerShieldActivations.entrySet().iterator();
 
+        // EF 判定帧轮询：持续检测 attacking() 上升沿（false→true），armed 时触发反弹
+        for (Map.Entry<UUID, yesman.epicfight.world.capabilities.entitypatch.player.ServerPlayerPatch> entry : efPlayerPatches.entrySet()) {
+            UUID id = entry.getKey();
+            yesman.epicfight.world.capabilities.entitypatch.player.ServerPlayerPatch patch = entry.getValue();
+            boolean curAttacking = patch.getEntityState().attacking();
+            boolean prevAttacking = efPrevAttacking.getOrDefault(id, false);
+            boolean armed = efArmed.getOrDefault(id, false);
+            if (curAttacking && !prevAttacking) {
+                // 上升沿：刚进入判定帧
+                ServerPlayer player = (ServerPlayer) patch.getOriginal();
+                ReflectShieldMod.LOGGER.info("[RS] rising edge for {}, armed={}", player.getName().getString(), armed);
+                if (armed) {
+                    activateFromEf(player);
+                }
+            }
+            // attacking 结束（下降沿）时清除 armed，避免下一次非攻击动画误触
+            if (!curAttacking && prevAttacking) {
+                efArmed.put(id, false);
+            }
+            efPrevAttacking.put(id, curAttacking);
+        }
+
         while (iter.hasNext()) {
             Map.Entry<UUID, Long> entry = iter.next();
             UUID id = entry.getKey();
@@ -101,8 +223,8 @@ public class ReflectHandler {
                 continue;
             }
 
-            // 检查物品白名单
-            if (!ItemMatcher.matches(player.getMainHandItem())) {
+            // 检查物品白名单（EF 被动技能路径已在 ReflectSkill 中验证武器类型，跳过白名单）
+            if (!efManagedPlayers.contains(id) && !ItemMatcher.matches(player.getMainHandItem())) {
                 continue;
             }
 
@@ -292,8 +414,8 @@ public class ReflectHandler {
         if (!playerShieldActivations.containsKey(id)) return;
         if (!player.isAlive()) return;
 
-        // 检查物品白名单
-        if (!ItemMatcher.matches(player.getMainHandItem())) return;
+        // 检查物品白名单（EF 被动技能路径已在 ReflectSkill 中验证武器类型，跳过白名单）
+        if (!efManagedPlayers.contains(id) && !ItemMatcher.matches(player.getMainHandItem())) return;
 
         // 跳过归属于该玩家自身的投掷物
         net.minecraft.world.entity.Entity owner = proj.getOwner();
