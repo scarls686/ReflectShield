@@ -68,7 +68,10 @@ public class ClientEventHandler {
         // 检测单次点击（consumeClick 每次点击只返回 true 一次）
         // EF 被动技能管理的玩家：按键路径禁用，由服务端攻击事件触发
         // 同时在客户端检查白名单：只有手持符合白名单的物品才激活（与服务端逻辑保持一致）
-        if (KeyBindings.REFLECT_KEY.consumeClick() && !isReflecting && !efManaged
+        // efManaged=true 且处于 EF 战斗模式时，走 EF 路径，按键路径禁用
+        // 非战斗模式（或未学技能）时，按键路径正常工作
+        boolean efActive = efManaged && yesman.epicfight.client.ClientEngine.getInstance().isEpicFightMode();
+        if (KeyBindings.REFLECT_KEY.consumeClick() && !isReflecting && !efActive
                 && ItemMatcher.matches(mc.player.getMainHandItem())) {
             isReflecting = true;
             shieldStartTime = System.currentTimeMillis();
