@@ -1,6 +1,6 @@
 package com.reflectshield.common.network;
 
-import com.reflectshield.client.ClientEventHandler;
+import com.reflectshield.compat.epicfight.EfClientHandler;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -31,7 +31,7 @@ public class PacketEfManaged {
     public static void handle(PacketEfManaged msg, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() ->
             DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
-                ClientEventHandler.setEfManaged(msg.managed)
+                EfClientHandler.setManaged(msg.managed)
             )
         );
         ctx.get().setPacketHandled(true);

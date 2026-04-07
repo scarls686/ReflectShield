@@ -27,6 +27,7 @@ import java.util.List;
  *   │  [恢复默认值]   [保存]   [取消]             │  ← 固定底部
  *   └─────────────────────────────────────────────┘
  *
+ * 所有水平布局基于 this.width 做相对计算，适配不同分辨率和 GUI 缩放。
  * 左列内容若超出可见高度可用鼠标滚轮（在左列区域内）滚动。
  * 右列白名单同理。
  * 底部按钮区始终固定可见。
@@ -61,45 +62,43 @@ public class ConfigScreen extends Screen {
     private int leftScroll = 0;
 
     // ────────────────────────────────────────────
-    // 布局常量
+    // 固定尺寸常量（行高、间距等，不随屏幕缩放）
     // ────────────────────────────────────────────
 
-    // 底部按钮栏高度（含分隔线上方空白）
     private static final int BOTTOM_BAR_H = 30;
-    // 标题区高度
-    private static final int TITLE_H = 24;
-
-    // 左列
-    private static final int LEFT_X      = 8;
-    private static final int LEFT_W      = 248;   // 标签 + 输入框区域总宽
-    private static final int LABEL_X     = LEFT_X;
-    private static final int FIELD_X     = LEFT_X + 130;
-    private static final int FIELD_W     = 110;
-    private static final int FIELD_H     = 16;
-    private static final int ROW_H       = 22;
-    private static final int BTN_W       = LEFT_W;
-    private static final int BTN_H       = 18;
-
-    // 右列（白名单）
-    private static final int WL_COL_X   = 264;
-    private static final int WL_NUM_W   = 14;   // 行号宽度
-    private static final int WL_W       = 164;
-    private static final int WL_H       = 16;
-    private static final int WL_ROW_H   = 20;
-    private static final int WL_TITLE_Y = 8;    // 相对于内容区顶部
+    private static final int TITLE_H      = 24;
+    private static final int FIELD_H      = 16;
+    private static final int ROW_H        = 22;
+    private static final int BTN_H        = 18;
+    private static final int WL_NUM_W     = 14;
+    private static final int WL_H         = 16;
+    private static final int WL_ROW_H     = 20;
+    private static final int MARGIN       = 8;
+    private static final int COL_GAP      = 8;
+    private static final int SCROLLBAR_W  = 6;
 
     // ────────────────────────────────────────────
-    // 运行时计算（init 中填充）
+    // 运行时布局变量（init 中根据屏幕尺寸计算）
     // ────────────────────────────────────────────
 
-    /** 内容区顶部 Y（屏幕绝对坐标） */
+    private int leftX;
+    private int leftW;
+    private int labelX;
+    private int fieldX;
+    private int fieldW;
+    private int btnW;
+
+    private int wlColX;
+    private int wlW;
+
+    /** 内容区顶部 Y */
     private int contentTop;
-    /** 内容区底部 Y（屏幕绝对坐标，底部按钮栏上方分隔线位置） */
+    /** 内容区底部 Y */
     private int contentBottom;
     /** 内容区可用高度 */
     private int contentH;
 
-    /** 左列内容总高度（所有控件展开后） */
+    /** 左列内容总高度 */
     private int leftTotalH;
     /** 白名单内容总高度 */
     private int wlTotalH() { return whitelistRows.size() * WL_ROW_H; }
@@ -121,9 +120,21 @@ public class ConfigScreen extends Screen {
         wlScroll = 0;
         whitelistRows.clear();
 
+        // ── 计算布局 ──
         contentTop    = TITLE_H;
         contentBottom = this.height - BOTTOM_BAR_H;
         contentH      = contentBottom - contentTop;
+
+        leftX  = MARGIN;
+        leftW  = (int) ((this.width - MARGIN * 2 - COL_GAP) * 0.55);
+        labelX = leftX;
+        fieldW = Math.max(60, (int) (leftW * 0.45));
+        fieldX = leftX + leftW - fieldW;
+        btnW   = leftW;
+
+        wlColX = leftX + leftW + COL_GAP;
+        wlW    = this.width - wlColX - WL_NUM_W - MARGIN - SCROLLBAR_W;
+        wlW    = Math.max(60, wlW);
 
         // ── 左列控件（y 为虚拟坐标，相对于内容区顶部，不含 scroll）──
         int y = 4;
@@ -137,14 +148,14 @@ public class ConfigScreen extends Screen {
         distanceField = makeField(y, String.valueOf(ModConfig.SHIELD_DISTANCE.get()),            "-?\\d*\\.?\\d*"); y += ROW_H + 6;
 
         playerHitboxCheckbox = addRenderableWidget(new Checkbox(
-                LABEL_X, contentTop + y, BTN_W, FIELD_H,
+                labelX, contentTop + y, btnW, FIELD_H,
                 Component.translatable("gui.reflectshield.config.player_hitbox"),
                 ModConfig.SHIELD_USE_PLAYER_HITBOX.get()
         ));
         y += ROW_H;
 
         debugCheckbox = addRenderableWidget(new Checkbox(
-                LABEL_X, contentTop + y, BTN_W, FIELD_H,
+                labelX, contentTop + y, btnW, FIELD_H,
                 Component.translatable("gui.reflectshield.config.debug"),
                 ModConfig.DEBUG_SHOW_SHIELD.get()
         ));
@@ -153,13 +164,13 @@ public class ConfigScreen extends Screen {
         modeButton = addRenderableWidget(Button.builder(getModeComponent(), btn -> {
             currentMode = 1 - currentMode;
             btn.setMessage(getModeComponent());
-        }).bounds(LABEL_X, contentTop + y, BTN_W, BTN_H).build());
+        }).bounds(labelX, contentTop + y, btnW, BTN_H).build());
         y += BTN_H + 4;
 
         fireballModeButton = addRenderableWidget(Button.builder(getFireballModeComponent(), btn -> {
             currentFireballMode = (currentFireballMode + 1) % 3;
             btn.setMessage(getFireballModeComponent());
-        }).bounds(LABEL_X, contentTop + y, BTN_W, BTN_H).build());
+        }).bounds(labelX, contentTop + y, btnW, BTN_H).build());
         y += BTN_H + 4;
 
         leftTotalH = y;
@@ -175,23 +186,27 @@ public class ConfigScreen extends Screen {
         int wlBtnY = contentBottom - 20;
         addRenderableWidget(Button.builder(
                 Component.literal("+"), btn -> onAddRow()
-        ).bounds(WL_COL_X, wlBtnY, 20, 16).build());
+        ).bounds(wlColX, wlBtnY, 20, 16).build());
         addRenderableWidget(Button.builder(
                 Component.literal("-"), btn -> onRemoveRow()
-        ).bounds(WL_COL_X + 24, wlBtnY, 20, 16).build());
+        ).bounds(wlColX + 24, wlBtnY, 20, 16).build());
 
         // ── 底部固定按钮 ──
         int bY = this.height - 22;
         int cx = this.width / 2;
+        int bottomBtnW = Math.min(90, (this.width - 40) / 3);
+        int bottomGap = 15;
+        int totalBottomW = bottomBtnW * 3 + bottomGap * 2;
+        int bx = cx - totalBottomW / 2;
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.reflectshield.config.reset"), btn -> resetToDefaults()
-        ).bounds(cx - 150, bY, 90, 20).build());
+        ).bounds(bx, bY, bottomBtnW, 20).build());
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.reflectshield.config.save"), btn -> { saveConfig(); onClose(); }
-        ).bounds(cx - 45, bY, 90, 20).build());
+        ).bounds(bx + bottomBtnW + bottomGap, bY, bottomBtnW, 20).build());
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.reflectshield.config.cancel"), btn -> onClose()
-        ).bounds(cx + 60, bY, 90, 20).build());
+        ).bounds(bx + (bottomBtnW + bottomGap) * 2, bY, bottomBtnW, 20).build());
 
         applyLeftScroll();
         updateWlPositions();
@@ -209,6 +224,8 @@ public class ConfigScreen extends Screen {
         for (EditBox f : fields) {
             int absY = contentTop + y - leftScroll;
             f.setY(absY);
+            f.setX(fieldX);
+            f.setWidth(fieldW);
             boolean vis = absY >= contentTop && absY + FIELD_H <= contentBottom;
             f.active  = vis;
             f.visible = vis;
@@ -216,16 +233,22 @@ public class ConfigScreen extends Screen {
         }
         y += 6;
 
-        // 两个 Checkbox（只移动 Y）
+        // 两个 Checkbox
         setWidgetY(playerHitboxCheckbox, contentTop + y - leftScroll, contentTop, contentBottom);
+        playerHitboxCheckbox.setX(labelX);
         y += ROW_H;
         setWidgetY(debugCheckbox, contentTop + y - leftScroll, contentTop, contentBottom);
+        debugCheckbox.setX(labelX);
         y += ROW_H + 4;
 
         // 两个模式按钮
         setWidgetY(modeButton, contentTop + y - leftScroll, contentTop, contentBottom);
+        modeButton.setX(labelX);
+        modeButton.setWidth(btnW);
         y += BTN_H + 4;
         setWidgetY(fireballModeButton, contentTop + y - leftScroll, contentTop, contentBottom);
+        fireballModeButton.setX(labelX);
+        fireballModeButton.setWidth(btnW);
     }
 
     private void setWidgetY(net.minecraft.client.gui.components.AbstractWidget w, int absY, int top, int bot) {
@@ -245,7 +268,7 @@ public class ConfigScreen extends Screen {
     }
 
     private void addWhitelistRow(String value) {
-        EditBox box = new EditBox(font, WL_COL_X + WL_NUM_W, 0, WL_W, WL_H, Component.empty());
+        EditBox box = new EditBox(font, wlColX + WL_NUM_W, 0, wlW, WL_H, Component.empty());
         box.setMaxLength(200);
         box.setValue(value);
         whitelistRows.add(box);
@@ -268,16 +291,18 @@ public class ConfigScreen extends Screen {
     }
 
     private void updateWlPositions() {
-        int wlContentTop = contentTop + WL_ROW_H; // 标题行下方
-        int wlContentBot = contentBottom - 20 - 4; // +/- 按钮上方
+        int wlContentTop = contentTop + WL_ROW_H;
+        int wlContentBot = contentBottom - 20 - 4;
         for (int i = 0; i < whitelistRows.size(); i++) {
             EditBox box = whitelistRows.get(i);
             int rowY = wlContentTop + i * WL_ROW_H - wlScroll;
             box.setY(rowY);
+            box.setX(wlColX + WL_NUM_W);
+            box.setWidth(wlW);
             boolean vis = rowY >= wlContentTop && rowY + WL_H <= wlContentBot;
             box.setFocused(box.isFocused() && vis);
             box.active  = vis;
-            box.visible = true; // 渲染由 scissor 裁剪
+            box.visible = true;
         }
     }
 
@@ -290,7 +315,7 @@ public class ConfigScreen extends Screen {
         if (my < contentTop || my > contentBottom) return super.mouseScrolled(mx, my, delta);
 
         // 右列
-        if (mx >= WL_COL_X) {
+        if (mx >= wlColX) {
             int maxS = Math.max(0, wlTotalH() - wlVisibleH());
             wlScroll = (int) Math.max(0, Math.min(maxS, wlScroll - delta * WL_ROW_H));
             updateWlPositions();
@@ -298,7 +323,7 @@ public class ConfigScreen extends Screen {
         }
 
         // 左列
-        if (mx >= LEFT_X && mx <= LEFT_X + LEFT_W) {
+        if (mx >= leftX && mx <= leftX + leftW) {
             int maxS = Math.max(0, leftTotalH - contentH);
             leftScroll = (int) Math.max(0, Math.min(maxS, leftScroll - delta * ROW_H));
             applyLeftScroll();
@@ -319,13 +344,12 @@ public class ConfigScreen extends Screen {
         // 标题
         g.drawCenteredString(font, this.title, this.width / 2, 7, 0xFFFFFF);
 
-        // 分隔线（内容区与底部按钮栏之间）
+        // 分隔线
         g.fill(4, contentBottom, this.width - 4, contentBottom + 1, 0x88FFFFFF);
 
-        // ── 左列（scissor 裁剪到内容区） ──
-        g.enableScissor(LEFT_X, contentTop, LEFT_X + LEFT_W, contentBottom);
+        // ── 左列标签（scissor 裁剪） ──
+        g.enableScissor(leftX, contentTop, leftX + leftW, contentBottom);
 
-        // 标签
         String[] labelKeys = {
             "gui.reflectshield.config.speed",
             "gui.reflectshield.config.duration",
@@ -335,30 +359,28 @@ public class ConfigScreen extends Screen {
             "gui.reflectshield.config.depth",
             "gui.reflectshield.config.distance",
         };
-        int ly = contentTop + 4 + 4 - leftScroll; // +4 居中对齐输入框
+        int ly = contentTop + 4 + 4 - leftScroll;
         for (String key : labelKeys) {
             if (ly + font.lineHeight >= contentTop && ly <= contentBottom)
-                g.drawString(font, Component.translatable(key), LABEL_X, ly, 0xE0E0E0);
+                g.drawString(font, Component.translatable(key), labelX, ly, 0xE0E0E0);
             ly += ROW_H;
         }
 
         g.disableScissor();
 
-        // 左列控件（Checkbox / Button 自身已在 applyLeftScroll 设置 visible=false，无需再 scissor）
-        // 数值框需要 scissor（EditBox.render 自己不裁剪）
-        g.enableScissor(LEFT_X, contentTop, LEFT_X + LEFT_W, contentBottom);
+        // 左列数值框（scissor 裁剪）
+        g.enableScissor(leftX, contentTop, leftX + leftW, contentBottom);
         for (var w : this.renderables) {
             if (w == playerHitboxCheckbox || w == debugCheckbox
                     || w == modeButton || w == fireballModeButton) continue;
             if (whitelistRows.contains(w)) continue;
-            // 只渲染左列的 EditBox（数值框）
-            if (w instanceof EditBox eb && eb.getX() == FIELD_X) {
+            if (w instanceof EditBox eb && eb.getX() == fieldX) {
                 eb.render(g, mx, my, pt);
             }
         }
         g.disableScissor();
 
-        // 左列 Checkbox 和 Button（已由 visible 控制，直接渲染）
+        // 左列 Checkbox 和 Button
         playerHitboxCheckbox.render(g, mx, my, pt);
         debugCheckbox.render(g, mx, my, pt);
         modeButton.render(g, mx, my, pt);
@@ -368,16 +390,15 @@ public class ConfigScreen extends Screen {
         int wlContentTop = contentTop + WL_ROW_H;
         int wlContentBot = contentBottom - 20 - 4;
 
-        // 白名单标题（不随滚动）
         g.drawString(font, Component.translatable("gui.reflectshield.config.whitelist"),
-                WL_COL_X + WL_NUM_W, contentTop + 4, 0xFFD700);
+                wlColX + WL_NUM_W, contentTop + 4, 0xFFD700);
 
-        g.enableScissor(WL_COL_X, wlContentTop, WL_COL_X + WL_NUM_W + WL_W + 8, wlContentBot);
+        g.enableScissor(wlColX, wlContentTop, wlColX + WL_NUM_W + wlW + SCROLLBAR_W + 2, wlContentBot);
         for (int i = 0; i < whitelistRows.size(); i++) {
             EditBox box = whitelistRows.get(i);
             int rowY = box.getY();
             if (rowY + WL_H < wlContentTop || rowY > wlContentBot) continue;
-            g.drawString(font, String.valueOf(i + 1), WL_COL_X, rowY + 4, 0x888888);
+            g.drawString(font, String.valueOf(i + 1), wlColX, rowY + 4, 0x888888);
             box.render(g, mx, my, pt);
         }
         g.disableScissor();
@@ -388,17 +409,17 @@ public class ConfigScreen extends Screen {
         if (totH > visH && visH > 0) {
             int thumbH  = Math.max(10, visH * visH / totH);
             int thumbY  = wlContentTop + (int) ((long) wlScroll * (visH - thumbH) / (totH - visH));
-            int scrollX = WL_COL_X + WL_NUM_W + WL_W + 2;
+            int scrollX = wlColX + WL_NUM_W + wlW + 2;
             g.fill(scrollX, wlContentTop, scrollX + 3, wlContentBot, 0x44FFFFFF);
             g.fill(scrollX, thumbY, scrollX + 3, thumbY + thumbH, 0xCCFFFFFF);
         }
 
-        // 底部按钮（+/-, 重置/保存/取消）及其他 widget
+        // 底部按钮及其他 widget
         for (var w : this.renderables) {
-            if (w instanceof EditBox eb && eb.getX() == FIELD_X) continue; // 已渲染
-            if (whitelistRows.contains(w)) continue; // 已渲染
+            if (w instanceof EditBox eb && eb.getX() == fieldX) continue;
+            if (whitelistRows.contains(w)) continue;
             if (w == playerHitboxCheckbox || w == debugCheckbox
-                    || w == modeButton || w == fireballModeButton) continue; // 已渲染
+                    || w == modeButton || w == fireballModeButton) continue;
             w.render(g, mx, my, pt);
         }
     }
@@ -461,11 +482,11 @@ public class ConfigScreen extends Screen {
     }
 
     @Override
-    public boolean isPauseScreen() { return false; }
+    public boolean isPauseScreen() { return true; }
 
     private EditBox makeField(int virtualY, String value, String filter) {
         EditBox box = addRenderableWidget(
-                new EditBox(font, FIELD_X, contentTop + virtualY, FIELD_W, FIELD_H, Component.empty()));
+                new EditBox(font, fieldX, contentTop + virtualY, fieldW, FIELD_H, Component.empty()));
         box.setValue(value);
         box.setFilter(s -> s.matches(filter));
         return box;

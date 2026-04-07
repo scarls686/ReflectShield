@@ -23,8 +23,6 @@ mcmodsrepo/
 
 # Project-specific excludes
 CLAUDE.md
-_notes/
-参考/
 .eclipse/
 runClient.launch
 runServer.launch
